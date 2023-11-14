@@ -1,0 +1,249 @@
+<html>
+
+<head>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+  </style>
+  <style>
+    .gridlines .domain {
+      display: none;
+    }
+
+    .gridlines line {
+      stroke: #444;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Restaurants in Toronto</h1>
+  <h3>Data from Yelp</h3>
+
+  <hr>
+  <h2>Restaurant Type Distribution</h2>
+  <svg width="700" height="500" id="piechart"></svg>
+  <hr>
+  <h2>Average Star Rating for Restaurant Types</h2>
+  <svg width="1000" height="500" id="barchart"></svg>
+  <script>
+    d3.csv("yelpData.csv", d3.autoType)
+      .then((data) => {
+        const restaurantData = [];
+
+        data.forEach(d => {
+          if (d['categories'].split(";").includes("Restaurants")) {
+            restaurantData.push(d);
+          }
+        });
+
+        const barsPubs = {
+          name: "Bars/Pubs",
+          tags: ["Beer Bar", "Dive Bars", "Wine & Spirits", "Beer", "Wine Bars",
+            "Gastropubs", "Sports Bars", "Cocktail Bars", "Pubs", "Bars"], data: []
+        }
+        const sandwiches = { name: "Sandwiches", tags: ["Sandwiches"], data: [] }
+        const breakfast = { name: "Breakfast", tags: ["Breakfast & Brunch"], data: [] }
+        const canadian = { name: "Canadian", tags: ["Poutineries", "Canadian (New)"], data: [] }
+        const eastAsian = {
+          name: "East Asian",
+          tags: ["Taiwanese", "Filipino", "Ramen", "Dim Sum", "Vietnamese", "Korean",
+            "Thai", "Asian Fusion", "Sushi Bars", "Japanese", "Chinese"], data: []
+        }
+        const cafeBakery = {
+          name: "Cafes/Bakeries",
+          tags: ["Bagels", "Tea Rooms", "Bakeries", "Cafes", "Coffee & Tea"], data: []
+        }
+        const fastFood = { name: "Fast Food", tags: ["Fast Food"], data: [] }
+        const italian = { name: "Italian", tags: ["Italian", "Pizza"], data: [] }
+        const american = {
+          name: "American",
+          tags: ["Hot Dogs", "Southern", "American (New)", "Diners", "Barbeque",
+            "Chicken Wings", "American (Traditional)", "Burgers"], data: []
+        }
+        const mediterranean = {
+          name: "Mediterranean",
+          tags: ["Afghan", "Lebanese", "Falafel", "Turkish", "Persian/Iranian",
+            "Pakistani", "Greek", "Mediterranean", "Middle Eastern"], data: []
+        }
+        const indian = { name: "Indian", tags: ["Indian"], data: [] }
+        const mexican = { name: "Mexican", tags: ["Tex-Mex", "Mexican"], data: [] }
+        const other = { name: "Other", tags: [], data: [] }
+
+        const categoryList = [indian, mexican, fastFood, breakfast, canadian, sandwiches,
+          mediterranean, italian, cafeBakery, american, barsPubs, eastAsian, other]
+
+
+        restaurantData.forEach(d => {
+          const restaurantTags = d['categories'].split(";");
+          var foundCategory = false;
+          categoryList.forEach(umbrellaCategory => {
+            umbrellaCategory.tags.forEach(category => {
+              if (!foundCategory && restaurantTags.includes(category)) {
+                umbrellaCategory.data.push(d);
+                foundCategory = true;
+              }
+            });
+          });
+          if (!foundCategory) {
+            other.data.push(d);
+          }
+        });
+
+        const piechartFrequency = categoryList.map(cat => [cat.name, cat.data.length]);
+
+        var data = piechartFrequency.sort(function (a, b) {
+          return b[1] - a[1];
+        });
+
+        var svg = d3.select("svg"),
+          width = svg.attr("width"),
+          height = svg.attr("height"),
+          radius = Math.min(width, height) / 2 - 60;
+        g = svg.append("g").attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+        var color = d3.scaleOrdinal()
+          .domain(categoryList)
+          .range(["#c74343", "#dc835d", "#ffdd8e", "#b0c26f", "#71ac84", "#339cba", "#476cda",
+            "#5148a2", "#803d9d", "#be50c2", "#eda1f1", "#e67eae", "#ffd2ea"]);
+
+        // Generate the pie
+        var pie = d3.pie().value(function (d) {
+          return d[1];
+        });
+
+        const pieDataShifted = [];
+        pie(data).forEach(d => {
+          d.startAngle -= 0.5;
+          d.endAngle -= 0.5;
+          pieDataShifted.push(d);
+        });
+
+        // Generate the arcs
+        var arc = d3.arc()
+          .innerRadius(radius * 0.5)
+          .outerRadius(radius * 0.8);
+
+        //Generate groups
+        var arcs = g.selectAll("arc")
+          .data(pieDataShifted)
+          .enter()
+          .append("g")
+          .attr("class", "arc")
+
+        //Draw arc paths
+        arcs.append("path")
+          .attr("fill", function (d, i) {
+            return color(i);
+          })
+          .attr("stroke-width", "2")
+          .attr("stroke", "white")
+          .attr("d", arc);
+
+        var outerArc = d3.arc()
+          .innerRadius(radius * 0.95)
+          .outerRadius(radius * 0.95)
+
+        g
+          .selectAll('allPolylines')
+          .data(pieDataShifted)
+          .enter()
+          .append('polyline')
+          .attr("stroke", "black")
+          .style("fill", "none")
+          .attr("stroke-width", 1)
+          .attr('points', function (d) {
+            var posA = arc.centroid(d) // line insertion in the slice
+            var posB = outerArc.centroid(d) // line break: we use the other arc generator that has been built only for that
+            var posC = outerArc.centroid(d); // Label position = almost the same as posB
+            var midangle = d.startAngle + (d.endAngle - d.startAngle) / 2 // we need the angle to see if the X position will be at the extreme right or extreme left
+            posC[0] = radius * 0.95 * (midangle < Math.PI ? 1 : -1); // multiply by 1 or -1 to put it on the right or on the left
+            return [posA, posB, posC]
+          })
+
+        g
+          .selectAll('allLabels')
+          .data(pieDataShifted)
+          .enter()
+          .append('text')
+          .text(function (d) { return d.data[0] })
+          .attr('transform', function (d) {
+            var pos = outerArc.centroid(d);
+            var midangle = d.startAngle + (d.endAngle - d.startAngle) / 2
+            pos[0] = radius * 0.99 * (midangle < Math.PI ? 1 : -1);
+            return 'translate(' + pos + ')';
+          })
+          .style('text-anchor', function (d) {
+            var midangle = d.startAngle + (d.endAngle - d.startAngle) / 2
+            return (midangle < Math.PI ? 'start' : 'end')
+          })
+
+        //Start of bar chart
+
+        const barchartData = [barsPubs, sandwiches, breakfast, canadian,
+          eastAsian, cafeBakery, fastFood, italian, american, mediterranean, indian, mexican, other];
+
+        const barchartSvg = d3.select("svg#barchart");
+        const widthBarchart = barchartSvg.attr("width");
+        const heightBarchart = barchartSvg.attr("height");
+
+        const marginsBarchart = { top: 10, right: 10, bottom: 50, left: 50 };
+        const chartWidthBarchart = widthBarchart - marginsBarchart.left - marginsBarchart.right;
+        const chartHeightBarchart = heightBarchart - marginsBarchart.top - marginsBarchart.bottom;
+
+        let annotationsBarchart = barchartSvg.append("g").attr("id", "annotationsBarchart");
+        let barchartArea = barchartSvg.append('g')
+          .attr('transform', `translate(${marginsBarchart.left},${marginsBarchart.top})`);
+
+        const ratingScale = d3.scaleLinear().domain([0.0, 5.0]).range([chartHeightBarchart, 0]);
+        const restaurantScale = d3.scaleBand().domain(categoryList.map(cat => cat.name)).range([0, chartWidthBarchart])
+          .padding(0.15);
+
+
+        let leftAxis = d3.axisLeft(ratingScale);
+        let leftGridlines = d3.axisLeft(ratingScale)
+          .tickSize(-chartWidthBarchart - 10)
+          .tickFormat("")
+        annotationsBarchart.append("g")
+          .attr("class", "y axis")
+          .attr("transform", `translate(${marginsBarchart.left - 10},${marginsBarchart.top})`)
+          .call(leftAxis)
+        annotationsBarchart.append("g")
+          .attr("class", "y gridlines")
+          .attr("transform", `translate(${marginsBarchart.left - 10},${marginsBarchart.top})`)
+          .call(leftGridlines);
+        let bottomAxis = d3.axisBottom(restaurantScale)
+        // We're not making gridlines, since they'll just stick up from the bars
+        annotationsBarchart.append("g")
+          .attr("class", "x axis")
+          .attr("transform", `translate(${marginsBarchart.left},${chartHeightBarchart + marginsBarchart.top + 10})`)
+          .call(bottomAxis);
+
+        barchartData.forEach(d => {
+          let iterator = 0;
+          let totalStars = 0;
+          d['data'].forEach(d => {
+            iterator = iterator + 1;
+            totalStars = totalStars + d['stars'];
+          })
+          d['avgStars'] = totalStars / iterator;
+          iterator = 0;
+          totalStars = 0;
+        });
+
+        barchartArea.selectAll('rect.bar').data(barchartData)
+          .join('rect').attr('class', 'bar')
+          .attr("fill", function (d, i) {
+            return color(i);
+          })
+          .attr("x", d => restaurantScale(d.name))
+          .attr("y", d => ratingScale(d.avgStars))
+          .attr("height", d => ratingScale(0.0) - ratingScale(d.avgStars))
+          .attr("width", restaurantScale.bandwidth());
+      });
+
+
+
+  </script>
+</body>
+
+</html>
